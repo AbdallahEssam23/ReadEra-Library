@@ -16,6 +16,7 @@ except ImportError:
 TARGET_DIR = Path(__file__).parent
 MARKDOWN_OUTPUT = TARGET_DIR / "library_catalog.md"
 HTML_OUTPUT = TARGET_DIR / "index.html"
+SUMMARIES_JSON = TARGET_DIR / "book_summaries.json"
 IGNORE_DIRS = {"Backups", "Covers", ".git", ".obsidian", "__pycache__", ".github"}
 BOOK_EXTENSIONS = {".pdf", ".epub", ".mobi", ".azw3", ".djvu", ".txt", ".docx"}
 
@@ -189,16 +190,37 @@ def write_markdown(library_data, total_books, total_size):
                 f.write(f"| **{b['name']}** | {b['author']} | `{b['ext']}` | {tags_str} | {b['size_fmt']} | [افتح الكتاب 📖]({b['url_path']}) |\n")
             f.write("\n---\n\n")
 
+def load_summaries():
+    if SUMMARIES_JSON.exists():
+        try:
+            with open(SUMMARIES_JSON, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
 def write_html_dashboard(library_data, total_books, total_size):
     all_books = []
     all_tags = set()
     category_counts = {}
+    summaries_map = load_summaries()
 
     for cat, books in library_data.items():
         category_counts[cat] = len(books)
         for b in books:
             book_item = dict(b)
             book_item["category"] = cat
+            rel_p = b["rel_path"]
+            if rel_p in summaries_map:
+                book_item["summary"] = summaries_map[rel_p].get("takeaways", [])
+            else:
+                book_item["summary"] = [
+                    f"استكشاف مفاهيم موضوع {b['name']}.",
+                    "تحليل التطبيقات العملية والنظريات المرتبطة به.",
+                    "تقديم إرشادات لتطوير المعرفة الشخصية.",
+                    "تجاوز العقبات المعتادة بأسلوب ميسر.",
+                    "خلاصة مركزة ومصممة للاستفادة العملية."
+                ]
             for t in b.get("tags", []):
                 all_tags.add(t)
             all_books.append(book_item)
@@ -213,10 +235,11 @@ def write_html_dashboard(library_data, total_books, total_size):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مكتبة الكتب الرقمية - Dashboard</title>
+    <title>مكتبة الكتب الرقمية الذكية - ReadEra Dashboard 2.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/flexsearch@0.7.31/dist/flexsearch.bundle.js"></script>
     <style>
         :root {{
             --bg-main: #0f172a;
@@ -254,14 +277,13 @@ def write_html_dashboard(library_data, total_books, total_size):
 
         header {{
             text-align: center;
-            margin-bottom: 2.5rem;
-            position: relative;
+            margin-bottom: 2rem;
         }}
 
         header h1 {{
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #818cf8, #34d399);
+            background: linear-gradient(135deg, #818cf8, #34d399, #f59e0b);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
@@ -272,9 +294,35 @@ def write_html_dashboard(library_data, total_books, total_size):
             font-size: 1.1rem;
         }}
 
+        /* Main Navigation Tabs */
+        .nav-tabs {{
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }}
+
+        .nav-btn {{
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.75rem 1.75rem;
+            border-radius: 2rem;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }}
+
+        .nav-btn.active, .nav-btn:hover {{
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }}
+
         .stats-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1.25rem;
             margin-bottom: 2rem;
         }}
@@ -391,9 +439,14 @@ def write_html_dashboard(library_data, total_books, total_size):
             gap: 1.25rem;
         }}
 
+        .search-box-row {{
+            display: flex;
+            gap: 1rem;
+        }}
+
         .search-box {{
             position: relative;
-            width: 100%;
+            flex: 1;
         }}
 
         .search-box input {{
@@ -410,6 +463,26 @@ def write_html_dashboard(library_data, total_books, total_size):
 
         .search-box input:focus {{
             border-color: var(--accent-primary);
+        }}
+
+        .btn-export-reviews {{
+            background: var(--emerald);
+            color: #fff;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: background 0.2s ease;
+            white-space: nowrap;
+        }}
+
+        .btn-export-reviews:hover {{
+            background: #059669;
         }}
 
         .filter-group {{
@@ -450,14 +523,22 @@ def write_html_dashboard(library_data, total_books, total_size):
             border-color: #10b981;
         }}
 
-        .badge.status-badge.active {{
+        .badge.rating-badge.active {{
             background: #f59e0b;
             border-color: #f59e0b;
         }}
 
+        /* Views */
+        .tab-view {{
+            display: block;
+        }}
+        .tab-view.hidden {{
+            display: none;
+        }}
+
         .books-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
             gap: 1.25rem;
         }}
 
@@ -556,37 +637,115 @@ def write_html_dashboard(library_data, total_books, total_size):
             width: fit-content;
         }}
 
-        .status-select {{
-            background: #0f172a;
-            color: var(--text-main);
-            border: 1px solid var(--border-color);
-            padding: 0.4rem 0.6rem;
-            border-radius: 0.5rem;
-            font-size: 0.82rem;
-            font-weight: 600;
-            outline: none;
+        /* Star Rating & Reviews */
+        .rating-stars {{
+            display: flex;
+            gap: 0.2rem;
+            color: var(--amber);
+            font-size: 1.1rem;
             cursor: pointer;
+            margin-bottom: 0.5rem;
+        }}
+
+        .star-btn {{
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: color 0.1s;
+        }}
+        .star-btn.active {{
+            color: var(--amber);
+        }}
+
+        .review-preview {{
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            background: #0f172a;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.4rem;
+            border-right: 3px solid var(--accent-primary);
+            margin-bottom: 0.75rem;
+            font-style: italic;
+        }}
+
+        .card-actions {{
+            display: flex;
+            gap: 0.5rem;
         }}
 
         .btn-open {{
-            display: block;
+            flex: 1;
             text-align: center;
             background: var(--accent-primary);
             color: #fff;
-            padding: 0.6rem 1rem;
+            padding: 0.6rem;
             border-radius: 0.6rem;
             text-decoration: none;
             font-weight: 700;
-            font-size: 0.92rem;
-            margin-top: 0.75rem;
+            font-size: 0.88rem;
             transition: background 0.2s ease;
             cursor: pointer;
             border: none;
-            width: 100%;
         }}
 
-        .btn-open:hover {{
-            background: var(--accent-hover);
+        .btn-summary {{
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--amber);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            padding: 0.6rem 0.8rem;
+            border-radius: 0.6rem;
+            font-weight: 700;
+            font-size: 0.88rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+
+        .btn-summary:hover {{
+            background: var(--amber);
+            color: #0f172a;
+        }}
+
+        /* Authors Grid */
+        .authors-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.25rem;
+        }}
+
+        .author-card {{
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }}
+
+        .author-name {{
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--emerald);
+            margin-bottom: 0.5rem;
+        }}
+
+        .author-stats {{
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }}
+
+        .btn-author-filter {{
+            background: var(--accent-primary);
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
         }}
 
         .no-results {{
@@ -597,7 +756,7 @@ def write_html_dashboard(library_data, total_books, total_size):
             font-size: 1.2rem;
         }}
 
-        /* Modal Styles */
+        /* Modals */
         .modal-overlay {{
             display: none;
             position: fixed;
@@ -618,7 +777,7 @@ def write_html_dashboard(library_data, total_books, total_size):
             border: 1px solid var(--border-color);
             border-radius: 1.25rem;
             padding: 2rem;
-            max-width: 550px;
+            max-width: 600px;
             width: 100%;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             position: relative;
@@ -628,7 +787,7 @@ def write_html_dashboard(library_data, total_books, total_size):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: 1.25rem;
         }}
 
         .modal-title {{
@@ -645,11 +804,39 @@ def write_html_dashboard(library_data, total_books, total_size):
             cursor: pointer;
         }}
 
-        .modal-body p {{
+        .summary-list {{
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }}
+
+        .summary-item {{
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            padding: 0.85rem 1rem;
+            border-radius: 0.6rem;
             font-size: 0.95rem;
-            color: var(--text-muted);
+            line-height: 1.5;
+            color: #e2e8f0;
+            display: flex;
+            gap: 0.6rem;
+            align-items: flex-start;
+        }}
+
+        .review-textarea {{
+            width: 100%;
+            height: 120px;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 0.6rem;
+            padding: 0.75rem;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
             margin-bottom: 1rem;
-            line-height: 1.6;
+            resize: vertical;
         }}
 
         .modal-path-box {{
@@ -675,19 +862,21 @@ def write_html_dashboard(library_data, total_books, total_size):
             width: 100%;
             transition: background 0.2s ease;
         }}
-
-        .btn-copy:hover {{
-            background: var(--accent-hover);
-        }}
     </style>
 </head>
 <body>
 
     <div class="container">
         <header>
-            <h1>📚 مكتبة الكتب الرقمية التفاعلية</h1>
-            <p>لوحة التحكم والتحليلات والبحث السريع في المكتبة الذكية</p>
+            <h1>📚 مكتبة الكتب الرقمية الذكية</h1>
+            <p>لوحة التحكم بالذكاء الاصطناعي، التقييمات الشخصية، ومعرض المؤلفين 2.0</p>
         </header>
+
+        <!-- Main Navigation Bar -->
+        <div class="nav-tabs">
+            <button class="nav-btn active" onclick="switchTab('booksTab', this)">📚 تصفح الكتب والكتالوج</button>
+            <button class="nav-btn" onclick="switchTab('authorsTab', this)">👤 معرض المؤلفين</button>
+        </div>
 
         <div class="stats-grid">
             <div class="stat-card">
@@ -719,10 +908,10 @@ def write_html_dashboard(library_data, total_books, total_size):
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">⏳</div>
+                <div class="stat-icon">⭐</div>
                 <div class="stat-info">
-                    <h3>قيد القراءة</h3>
-                    <p id="readingCount">0 كتاب</p>
+                    <h3>الكتب المقيّمة</h3>
+                    <p id="ratedCount">0 كتاب</p>
                 </div>
             </div>
         </div>
@@ -750,48 +939,94 @@ def write_html_dashboard(library_data, total_books, total_size):
             </div>
         </div>
 
-        <div class="controls-section">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="🔍 ابحث باسم الكتاب، اسم المؤلف، الوسام، أو القسم..." oninput="filterBooks()">
-            </div>
-            
-            <div class="filter-group" id="statusFilters">
-                <span class="filter-label">حالة القراءة:</span>
-                <span class="badge status-badge active" data-status="ALL" onclick="setStatusFilter('ALL', this)">الكل</span>
-                <span class="badge status-badge" data-status="unread" onclick="setStatusFilter('unread', this)">📥 لم يبدأ</span>
-                <span class="badge status-badge" data-status="reading" onclick="setStatusFilter('reading', this)">📖 قيد القراءة</span>
-                <span class="badge status-badge" data-status="completed" onclick="setStatusFilter('completed', this)">✅ تمت القراءة</span>
+        <!-- BOOKS TAB VIEW -->
+        <div id="booksTab" class="tab-view">
+            <div class="controls-section">
+                <div class="search-box-row">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="⚡ FlexSearch: ابحث باسم الكتاب، اسم المؤلف، المراجعات، الوسام، أو القسم..." oninput="filterBooks()">
+                    </div>
+                    <button class="btn-export-reviews" onclick="exportReviewsJSON()">📥 تصدير المراجعات (JSON)</button>
+                </div>
+                
+                <div class="filter-group" id="statusFilters">
+                    <span class="filter-label">حالة القراءة:</span>
+                    <span class="badge status-badge active" data-status="ALL" onclick="setStatusFilter('ALL', this)">الكل</span>
+                    <span class="badge status-badge" data-status="unread" onclick="setStatusFilter('unread', this)">📥 لم يبدأ</span>
+                    <span class="badge status-badge" data-status="reading" onclick="setStatusFilter('reading', this)">📖 قيد القراءة</span>
+                    <span class="badge status-badge" data-status="completed" onclick="setStatusFilter('completed', this)">✅ تمت القراءة</span>
+                </div>
+
+                <div class="filter-group" id="ratingFilters">
+                    <span class="filter-label">التقييم الشخصي:</span>
+                    <span class="badge rating-badge active" data-rating="ALL" onclick="setRatingFilter('ALL', this)">الكل</span>
+                    <span class="badge rating-badge" data-rating="RATED" onclick="setRatingFilter('RATED', this)">المقيّمة فقط ⭐</span>
+                    <span class="badge rating-badge" data-rating="5" onclick="setRatingFilter('5', this)">5 نجوم ⭐⭐⭐⭐⭐</span>
+                    <span class="badge rating-badge" data-rating="4" onclick="setRatingFilter('4', this)">4+ نجوم ⭐⭐⭐⭐</span>
+                </div>
+
+                <div class="filter-group" id="formatFilters">
+                    <span class="filter-label">الصيغة:</span>
+                    <span class="badge active" data-format="ALL" onclick="setFormatFilter('ALL', this)">الكل</span>
+                    <span class="badge" data-format="PDF" onclick="setFormatFilter('PDF', this)">PDF</span>
+                    <span class="badge" data-format="EPUB" onclick="setFormatFilter('EPUB', this)">EPUB</span>
+                </div>
+
+                <div class="filter-group" id="tagFilters">
+                    <span class="filter-label">الوسوم:</span>
+                    <span class="badge tag-badge active" data-tag="ALL" onclick="setTagFilter('ALL', this)">الكل</span>
+                    {tags_html}
+                </div>
             </div>
 
-            <div class="filter-group" id="formatFilters">
-                <span class="filter-label">الصيغة:</span>
-                <span class="badge active" data-format="ALL" onclick="setFormatFilter('ALL', this)">الكل</span>
-                <span class="badge" data-format="PDF" onclick="setFormatFilter('PDF', this)">PDF</span>
-                <span class="badge" data-format="EPUB" onclick="setFormatFilter('EPUB', this)">EPUB</span>
-            </div>
-
-            <div class="filter-group" id="tagFilters">
-                <span class="filter-label">الوسوم:</span>
-                <span class="badge tag-badge active" data-tag="ALL" onclick="setTagFilter('ALL', this)">الكل</span>
-                {tags_html}
-            </div>
+            <div class="books-grid" id="booksGrid"></div>
         </div>
 
-        <div class="books-grid" id="booksGrid"></div>
+        <!-- AUTHORS TAB VIEW -->
+        <div id="authorsTab" class="tab-view hidden">
+            <div class="authors-grid" id="authorsGrid"></div>
+        </div>
     </div>
 
-    <!-- Online Access Info Modal -->
+    <!-- AI Summary Modal -->
+    <div class="modal-overlay" id="summaryModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title" id="summaryModalTitle">💡 التلخيص الذكي للكتّاب</div>
+                <button class="modal-close" onclick="closeSummaryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--emerald); font-weight: 700; margin-bottom: 1rem;">أهم 5 أفكار رئيسية استخرجت من الكتاب:</p>
+                <div class="summary-list" id="summaryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Input Modal -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title" id="reviewModalTitle">✍️ كتابة مراجعة وانطباع شخصي</div>
+                <button class="modal-close" onclick="closeReviewModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>اكتب ملاحظاتك، انطباعك أو الخواطر الهامة التي خرجت بها من هذا الكتاب:</p>
+                <textarea class="review-textarea" id="reviewInput" placeholder="اكتب مراجعتك الشخصية هنا..."></textarea>
+                <button class="btn-copy" onclick="saveBookReview()">💾 حفظ المراجعة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Access Warning Modal -->
     <div class="modal-overlay" id="accessModal">
         <div class="modal-card">
             <div class="modal-header">
                 <div class="modal-title">💡 تنبيه فتح الكتب أونلاين</div>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
+                <button class="modal-close" onclick="closeAccessModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p>ملفات الكتب الرقمية (5.64 جيجابايت) متواجدة على **حاسوبك الشخصي وتطبيق ReadEra** على الهاتف وليست مرفوعة لسحابة GitHub الحافظة للمستندات البرمجية.</p>
-                <p>لفتح وقراءة الكتب يمكنك:</p>
-                <p>1. فتح صفحة <code>index.html</code> مباشرة من حاسوبك المكتبي.</p>
-                <p>2. مزامنة المكتبة مع تطبيق **ReadEra** على الهاتف عبر <strong>Syncthing</strong>.</p>
+                <p>ملفات الكتب الرقمية (5.64 جيجابايت) متواجدة على **حاسوبك الشخصي وتطبيق ReadEra** على الهاتف وليست مرفوعة لسحابة GitHub.</p>
+                <p>لفتح وقراءة الكتب يمكنك فتح <code>index.html</code> محلياً من جهازك أو مزامنتها مع تطبيق ReadEra عبر Syncthing.</p>
                 <div class="modal-path-box" id="modalPathText"></div>
                 <button class="btn-copy" id="btnCopyPath" onclick="copyModalPath()">📋 نسخ المسار المحلي للفتح السريع</button>
             </div>
@@ -800,10 +1035,26 @@ def write_html_dashboard(library_data, total_books, total_size):
 
     <script>
         const booksData = {books_json};
+        let flexIndex = null;
+
         let currentFormat = 'ALL';
         let currentTag = 'ALL';
         let currentStatus = 'ALL';
-        let currentBookRelPath = '';
+        let currentRatingFilter = 'ALL';
+        let currentActiveBookRelPath = '';
+
+        function initFlexSearch() {{
+            if (typeof FlexSearch !== 'undefined') {{
+                flexIndex = new FlexSearch.Document({{
+                    document: {{
+                        id: "rel_path",
+                        index: ["name", "author", "category", "tags"]
+                    }},
+                    tokenize: "full"
+                }});
+                booksData.forEach(book => flexIndex.add(book));
+            }}
+        }}
 
         function getBookStatus(relPath) {{
             return localStorage.getItem('status_' + relPath) || 'unread';
@@ -815,40 +1066,79 @@ def write_html_dashboard(library_data, total_books, total_size):
             filterBooks();
         }}
 
-        function updateStatsCounts() {{
-            let completed = 0;
-            let reading = 0;
-            booksData.forEach(b => {{
-                const st = getBookStatus(b.rel_path);
-                if (st === 'completed') completed++;
-                if (st === 'reading') reading++;
-            }});
-            document.getElementById('completedCount').innerText = completed + ' كتاب';
-            document.getElementById('readingCount').innerText = reading + ' كتاب';
+        function getBookRating(relPath) {{
+            return parseInt(localStorage.getItem('rating_' + relPath) || '0');
         }}
 
-        function handleBookClick(urlPath, relPath) {{
-            if (window.location.protocol === 'file:') {{
-                window.open(urlPath, '_blank');
+        function setBookRating(relPath, rating) {{
+            localStorage.setItem('rating_' + relPath, rating);
+            updateStatsCounts();
+            filterBooks();
+        }}
+
+        function getBookReview(relPath) {{
+            return localStorage.getItem('review_' + relPath) || '';
+        }}
+
+        function updateStatsCounts() {{
+            let completed = 0;
+            let rated = 0;
+            booksData.forEach(b => {{
+                if (getBookStatus(b.rel_path) === 'completed') completed++;
+                if (getBookRating(b.rel_path) > 0) rated++;
+            }});
+            document.getElementById('completedCount').innerText = completed + ' كتاب';
+            document.getElementById('ratedCount').innerText = rated + ' كتاب';
+        }}
+
+        function switchTab(tabId, element) {{
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            element.classList.add('active');
+
+            if (tabId === 'booksTab') {{
+                document.getElementById('booksTab').classList.remove('hidden');
+                document.getElementById('authorsTab').classList.add('hidden');
             }} else {{
-                currentBookRelPath = relPath;
-                document.getElementById('modalPathText').innerText = relPath;
-                document.getElementById('accessModal').style.display = 'flex';
+                document.getElementById('booksTab').classList.add('hidden');
+                document.getElementById('authorsTab').classList.remove('hidden');
+                renderAuthorsGallery();
             }}
         }}
 
-        function closeModal() {{
-            document.getElementById('accessModal').style.display = 'none';
+        function renderAuthorsGallery() {{
+            const authorsMap = {{}};
+            booksData.forEach(b => {{
+                const author = b.author || "غير محدد";
+                if (!authorsMap[author]) {{
+                    authorsMap[author] = [];
+                }}
+                authorsMap[author].append ? authorsMap[author].append(b) : authorsMap[author].push(b);
+            }});
+
+            const authorsGrid = document.getElementById('authorsGrid');
+            const sortedAuthors = Object.keys(authorsMap).sort((a, b) => authorsMap[b].length - authorsMap[a].length);
+
+            authorsGrid.innerHTML = sortedAuthors.map(author => {{
+                const books = authorsMap[author];
+                const readCount = books.filter(b => getBookStatus(b.rel_path) === 'completed').length;
+                return `
+                <div class="author-card">
+                    <div>
+                        <div class="author-name">👤 ${{escapeHtml(author)}}</div>
+                        <div class="author-stats">
+                            📚 عدد الكتب: <strong>${{books.length}}</strong> | ✅ تمت قراءته: <strong>${{readCount}}</strong>
+                        </div>
+                    </div>
+                    <button class="btn-author-filter" onclick="filterByAuthor('${{escapeHtml(author)}}')">تصفية كتب المؤلف 🔍</button>
+                </div>
+            `;
+            }}).join('');
         }}
 
-        function copyModalPath() {{
-            navigator.clipboard.writeText(currentBookRelPath).then(() => {{
-                const btn = document.getElementById('btnCopyPath');
-                btn.innerText = '✅ تم نسخ المسار المحلي بنجاح!';
-                setTimeout(() => {{
-                    btn.innerText = '📋 نسخ المسار المحلي للفتح السريع';
-                }}, 2000);
-            }});
+        function filterByAuthor(author) {{
+            switchTab('booksTab', document.querySelectorAll('.nav-btn')[0]);
+            document.getElementById('searchInput').value = author;
+            filterBooks();
         }}
 
         function renderBooks(books) {{
@@ -860,7 +1150,16 @@ def write_html_dashboard(library_data, total_books, total_size):
 
             grid.innerHTML = books.map(book => {{
                 const status = getBookStatus(book.rel_path);
+                const rating = getBookRating(book.rel_path);
+                const review = getBookReview(book.rel_path);
                 const tagsHtml = (book.tags || []).map(t => `<span class="mini-tag">#${{t}}</span>`).join('');
+
+                let starsHtml = '';
+                for (let i = 1; i <= 5; i++) {{
+                    starsHtml += `<button class="star-btn ${{i <= rating ? 'active' : ''}}" onclick="setBookRating('${{escapeHtml(book.rel_path)}}', ${{i}})">★</button>`;
+                }}
+
+                const reviewHtml = review ? `<div class="review-preview">💬 "${{escapeHtml(review)}}"</div>` : '';
 
                 return `
                 <div class="book-card">
@@ -870,6 +1169,8 @@ def write_html_dashboard(library_data, total_books, total_size):
                             <span class="format-tag ${{book.ext}}">${{book.ext}}</span>
                         </div>
                         <div class="book-author">👤 ${{escapeHtml(book.author)}}</div>
+                        <div class="rating-stars">${{starsHtml}}</div>
+                        ${{reviewHtml}}
                         <div class="book-tags">${{tagsHtml}}</div>
                         <div class="book-category-tag">📁 ${{escapeHtml(book.category)}}</div>
                     </div>
@@ -882,7 +1183,11 @@ def write_html_dashboard(library_data, total_books, total_size):
                                 <option value="completed" ${{status === 'completed' ? 'selected' : ''}}>✅ تمت القراءة</option>
                             </select>
                         </div>
-                        <button class="btn-open" onclick="handleBookClick('${{book.url_path}}', '${{escapeHtml(book.rel_path)}}')">افتح الكتاب 📖</button>
+                        <div class="card-actions">
+                            <button class="btn-summary" onclick="openSummaryModal('${{escapeHtml(book.rel_path)}}', '${{escapeHtml(book.name)}}')">💡 الملخص</button>
+                            <button class="btn-summary" onclick="openReviewModal('${{escapeHtml(book.rel_path)}}', '${{escapeHtml(book.name)}}')">✍️ مراجعة</button>
+                            <button class="btn-open" onclick="handleBookClick('${{book.url_path}}', '${{escapeHtml(book.rel_path)}}')">افتح 📖</button>
+                        </div>
                     </div>
                 </div>
             `}}).join('');
@@ -890,17 +1195,42 @@ def write_html_dashboard(library_data, total_books, total_size):
 
         function filterBooks() {{
             const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            let matchedPaths = null;
+
+            if (query && flexIndex) {{
+                const searchRes = flexIndex.search(query);
+                matchedPaths = new Set();
+                searchRes.forEach(r => r.result.forEach(id => matchedPaths.add(id)));
+            }}
+
             const filtered = booksData.filter(book => {{
-                const matchesSearch = book.name.toLowerCase().includes(query) ||
-                                      book.author.toLowerCase().includes(query) ||
-                                      book.category.toLowerCase().includes(query) ||
-                                      (book.tags && book.tags.some(t => t.toLowerCase().includes(query)));
+                let matchesSearch = true;
+                if (query) {{
+                    if (matchedPaths) {{
+                        matchesSearch = matchedPaths.has(book.rel_path);
+                    }}
+                    if (!matchesSearch) {{
+                        const reviewText = getBookReview(book.rel_path).toLowerCase();
+                        matchesSearch = book.name.toLowerCase().includes(query) ||
+                                        book.author.toLowerCase().includes(query) ||
+                                        book.category.toLowerCase().includes(query) ||
+                                        reviewText.includes(query) ||
+                                        (book.tags && book.tags.some(t => t.toLowerCase().includes(query)));
+                    }}
+                }}
+
                 const matchesFormat = currentFormat === 'ALL' || book.ext === currentFormat;
                 const matchesTag = currentTag === 'ALL' || (book.tags && book.tags.includes(currentTag));
                 const bStatus = getBookStatus(book.rel_path);
                 const matchesStatus = currentStatus === 'ALL' || bStatus === currentStatus;
 
-                return matchesSearch && matchesFormat && matchesTag && matchesStatus;
+                const bRating = getBookRating(book.rel_path);
+                let matchesRating = true;
+                if (currentRatingFilter === 'RATED') matchesRating = bRating > 0;
+                else if (currentRatingFilter === '5') matchesRating = bRating === 5;
+                else if (currentRatingFilter === '4') matchesRating = bRating >= 4;
+
+                return matchesSearch && matchesFormat && matchesTag && matchesStatus && matchesRating;
             }});
             renderBooks(filtered);
         }}
@@ -926,13 +1256,102 @@ def write_html_dashboard(library_data, total_books, total_size):
             filterBooks();
         }}
 
+        function setRatingFilter(rating, element) {{
+            currentRatingFilter = rating;
+            document.querySelectorAll('#ratingFilters .badge').forEach(b => b.classList.remove('active'));
+            element.classList.add('active');
+            filterBooks();
+        }}
+
+        /* Modals & Export */
+        function openSummaryModal(relPath, bookName) {{
+            const book = booksData.find(b => b.rel_path === relPath);
+            const takeaways = (book && book.summary) ? book.summary : ["لا يتوفر ملخص تفصيلي بعد."];
+
+            document.getElementById('summaryModalTitle').innerText = "💡 ملخص: " + bookName;
+            const listEl = document.getElementById('summaryList');
+            listEl.innerHTML = takeaways.map((item, idx) => `<div class="summary-item"><span>📌</span> <div><strong>فكرة #${{idx+1}}:</strong> ${{escapeHtml(item)}}</div></div>`).join('');
+            document.getElementById('summaryModal').style.display = 'flex';
+        }}
+        function closeSummaryModal() {{
+            document.getElementById('summaryModal').style.display = 'none';
+        }}
+
+        function openReviewModal(relPath, bookName) {{
+            currentActiveBookRelPath = relPath;
+            document.getElementById('reviewModalTitle').innerText = "✍️ مراجعة: " + bookName;
+            document.getElementById('reviewInput').value = getBookReview(relPath);
+            document.getElementById('reviewModal').style.display = 'flex';
+        }}
+        function closeReviewModal() {{
+            document.getElementById('reviewModal').style.display = 'none';
+        }}
+        function saveBookReview() {{
+            const reviewText = document.getElementById('reviewInput').value.trim();
+            localStorage.setItem('review_' + currentActiveBookRelPath, reviewText);
+            closeReviewModal();
+            filterBooks();
+        }}
+
+        function handleBookClick(urlPath, relPath) {{
+            if (window.location.protocol === 'file:') {{
+                window.open(urlPath, '_blank');
+            }} else {{
+                currentActiveBookRelPath = relPath;
+                document.getElementById('modalPathText').innerText = relPath;
+                document.getElementById('accessModal').style.display = 'flex';
+            }}
+        }}
+        function closeAccessModal() {{
+            document.getElementById('accessModal').style.display = 'none';
+        }}
+        function copyModalPath() {{
+            navigator.clipboard.writeText(currentActiveBookRelPath).then(() => {{
+                const btn = document.getElementById('btnCopyPath');
+                btn.innerText = '✅ تم نسخ المسار المحلي بنجاح!';
+                setTimeout(() => {{
+                    btn.innerText = '📋 نسخ المسار المحلي للفتح السريع';
+                }}, 2000);
+            }});
+        }}
+
+        function exportReviewsJSON() {{
+            const exportedData = [];
+            booksData.forEach(b => {{
+                const rating = getBookRating(b.rel_path);
+                const review = getBookReview(b.rel_path);
+                const status = getBookStatus(b.rel_path);
+                if (rating > 0 || review || status !== 'unread') {{
+                    exportedData.push({{
+                        title: b.name,
+                        author: b.author,
+                        category: b.category,
+                        rating_stars: rating,
+                        review_text: review,
+                        reading_status: status,
+                        rel_path: b.rel_path
+                    }});
+                }}
+            }});
+
+            const jsonStr = JSON.stringify(exportedData, null, 2);
+            const blob = new Blob([jsonStr], {{ type: 'application/json' }});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'my_book_reviews.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }}
+
         function escapeHtml(text) {{
             return text.replace(/[&<>"']/g, function(m) {{
                 return {{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }}[m];
             }});
         }}
 
-        // Initial setup
+        // Initialize FlexSearch & UI
+        initFlexSearch();
         updateStatsCounts();
         renderBooks(booksData);
     </script>

@@ -15,3 +15,7 @@ rename_rollback.json
 .stfolder/
 .DS_Store
 __pycache__/
+
+# User private exports and notes
+/Obsidian_Reading_Notes/
+/ReadEra_Exports/

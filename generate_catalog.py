@@ -16,7 +16,7 @@ except ImportError:
 TARGET_DIR = Path(__file__).parent
 MARKDOWN_OUTPUT = TARGET_DIR / "library_catalog.md"
 HTML_OUTPUT = TARGET_DIR / "index.html"
-IGNORE_DIRS = {"Backups", "Covers", ".git", ".obsidian", "__pycache__"}
+IGNORE_DIRS = {"Backups", "Covers", ".git", ".obsidian", "__pycache__", ".github"}
 BOOK_EXTENSIONS = {".pdf", ".epub", ".mobi", ".azw3", ".djvu", ".txt", ".docx"}
 
 TAG_RULES = {
@@ -580,6 +580,9 @@ def write_html_dashboard(library_data, total_books, total_size):
             font-size: 0.92rem;
             margin-top: 0.75rem;
             transition: background 0.2s ease;
+            cursor: pointer;
+            border: none;
+            width: 100%;
         }}
 
         .btn-open:hover {{
@@ -592,6 +595,89 @@ def write_html_dashboard(library_data, total_books, total_size):
             color: var(--text-muted);
             grid-column: 1 / -1;
             font-size: 1.2rem;
+        }}
+
+        /* Modal Styles */
+        .modal-overlay {{
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(6px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }}
+
+        .modal-card {{
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1.25rem;
+            padding: 2rem;
+            max-width: 550px;
+            width: 100%;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }}
+
+        .modal-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }}
+
+        .modal-title {{
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--amber);
+        }}
+
+        .modal-close {{
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }}
+
+        .modal-body p {{
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }}
+
+        .modal-path-box {{
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--emerald);
+            word-break: break-all;
+            margin-bottom: 1.25rem;
+        }}
+
+        .btn-copy {{
+            background: var(--accent-primary);
+            color: #fff;
+            padding: 0.65rem 1.25rem;
+            border-radius: 0.6rem;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s ease;
+        }}
+
+        .btn-copy:hover {{
+            background: var(--accent-hover);
         }}
     </style>
 </head>
@@ -694,11 +780,30 @@ def write_html_dashboard(library_data, total_books, total_size):
         <div class="books-grid" id="booksGrid"></div>
     </div>
 
+    <!-- Online Access Info Modal -->
+    <div class="modal-overlay" id="accessModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title">💡 تنبيه فتح الكتب أونلاين</div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>ملفات الكتب الرقمية (5.64 جيجابايت) متواجدة على **حاسوبك الشخصي وتطبيق ReadEra** على الهاتف وليست مرفوعة لسحابة GitHub الحافظة للمستندات البرمجية.</p>
+                <p>لفتح وقراءة الكتب يمكنك:</p>
+                <p>1. فتح صفحة <code>index.html</code> مباشرة من حاسوبك المكتبي.</p>
+                <p>2. مزامنة المكتبة مع تطبيق **ReadEra** على الهاتف عبر <strong>Syncthing</strong>.</p>
+                <div class="modal-path-box" id="modalPathText"></div>
+                <button class="btn-copy" id="btnCopyPath" onclick="copyModalPath()">📋 نسخ المسار المحلي للفتح السريع</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const booksData = {books_json};
         let currentFormat = 'ALL';
         let currentTag = 'ALL';
         let currentStatus = 'ALL';
+        let currentBookRelPath = '';
 
         function getBookStatus(relPath) {{
             return localStorage.getItem('status_' + relPath) || 'unread';
@@ -720,6 +825,30 @@ def write_html_dashboard(library_data, total_books, total_size):
             }});
             document.getElementById('completedCount').innerText = completed + ' كتاب';
             document.getElementById('readingCount').innerText = reading + ' كتاب';
+        }}
+
+        function handleBookClick(urlPath, relPath) {{
+            if (window.location.protocol === 'file:') {{
+                window.open(urlPath, '_blank');
+            }} else {{
+                currentBookRelPath = relPath;
+                document.getElementById('modalPathText').innerText = relPath;
+                document.getElementById('accessModal').style.display = 'flex';
+            }}
+        }}
+
+        function closeModal() {{
+            document.getElementById('accessModal').style.display = 'none';
+        }}
+
+        function copyModalPath() {{
+            navigator.clipboard.writeText(currentBookRelPath).then(() => {{
+                const btn = document.getElementById('btnCopyPath');
+                btn.innerText = '✅ تم نسخ المسار المحلي بنجاح!';
+                setTimeout(() => {{
+                    btn.innerText = '📋 نسخ المسار المحلي للفتح السريع';
+                }}, 2000);
+            }});
         }}
 
         function renderBooks(books) {{
@@ -753,7 +882,7 @@ def write_html_dashboard(library_data, total_books, total_size):
                                 <option value="completed" ${{status === 'completed' ? 'selected' : ''}}>✅ تمت القراءة</option>
                             </select>
                         </div>
-                        <a href="${{book.url_path}}" class="btn-open" target="_blank">افتح الكتاب 📖</a>
+                        <button class="btn-open" onclick="handleBookClick('${{book.url_path}}', '${{escapeHtml(book.rel_path)}}')">افتح الكتاب 📖</button>
                     </div>
                 </div>
             `}}).join('');

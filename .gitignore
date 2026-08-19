@@ -1,0 +1,15 @@
+# Ignore ebook files (due to GitHub 100MB per file limit & repository size)
+*.pdf
+*.epub
+*.mobi
+*.azw3
+*.djvu
+*.docx
+
+# Ignore application generated caches and backups
+/Covers/
+/Backups/
+rename_rollback.json
+.obsidian/
+.DS_Store
+__pycache__/

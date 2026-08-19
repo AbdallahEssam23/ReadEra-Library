@@ -38,8 +38,8 @@ systemctl --user enable --now syncthing
 ## 📂 الخطوة 4: مشاركة مجلد المكتبة `ReadEra`
 
 1. في لوحة تحكم الحاسوب [http://localhost:8384](http://localhost:8384)، اضغط على **"Add Folder"**:
-   - **Folder Label:** `ReadEra Library`
-   - **Folder Path:** `/home/abdallah/Documents/ReadEra`
+   * **Folder Label:** `ReadEra Library`
+   * **Folder Path:** `/home/abdallah/Documents/ReadEra`
 2. انتقل إلى تبويب **"Sharing"** وحدد جهاز هاتفك المحمول.
 3. اضغط **"Save"**.
 

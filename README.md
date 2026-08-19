@@ -44,7 +44,8 @@
 
 ## 🚀 طريقة الاستخدام
 
-### 1. تنظيف أسماء الكتب:
+### 1. تنظيف أسماء الكتب
+
 ```bash
 # معاينة التعديلات بدون تطبيق (Dry Run)
 python3 clean_filenames.py
@@ -56,7 +57,8 @@ python3 clean_filenames.py --commit
 python3 clean_filenames.py --revert
 ```
 
-### 2. تحديث الفهرس ولوحة التحكم:
+### 2. تحديث الفهرس ولوحة التحكم
+
 ```bash
 python3 generate_catalog.py
 ```

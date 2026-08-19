@@ -5,11 +5,13 @@
 *.azw3
 *.djvu
 *.docx
+*.tmp
 
 # Ignore application generated caches and backups
 /Covers/
 /Backups/
 rename_rollback.json
 .obsidian/
+.stfolder/
 .DS_Store
 __pycache__/
